@@ -1,0 +1,36 @@
+# <type>[scope]: short summary
+#
+# Summary:
+# - Use imperative present tense.
+# - Keep the summary at 50 characters or fewer.
+# - Do not end the summary with a period.
+#
+# Types:
+# - feat: new feature
+# - fix: bug fix
+# - docs: documentation only
+# - style: formatting only
+# - refactor: code change without behavior change
+# - test: tests only
+# - chore: maintenance
+# - build: build system or dependency change
+# - ci: CI configuration
+# - perf: performance improvement
+# - revert: revert a previous change
+#
+# Scope examples:
+# - app
+# - api
+# - auth
+# - rag
+# - crawler
+# - index
+# - frontend
+# - deploy
+#
+# Body:
+# Explain why/context when useful. Wrap at 72 characters.
+#
+# Footers:
+# Fixes #ticket
+# BREAKING CHANGE: description

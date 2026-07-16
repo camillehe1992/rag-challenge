@@ -1,0 +1,46 @@
+#!/bin/sh
+set -eu
+
+commit_msg_file="$1"
+header="$(sed -n '1p' "$commit_msg_file")"
+
+case "$header" in
+  Merge\ *|Revert\ *)
+    exit 0
+    ;;
+esac
+
+pattern='^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)(\[[a-z0-9_-]+\])?: .+$'
+
+if ! printf '%s\n' "$header" | grep -Eq "$pattern"; then
+  cat >&2 <<'EOF'
+Invalid commit message.
+
+Expected:
+  <type>[scope]: short summary
+
+Examples:
+  feat[rag]: add hybrid retriever
+  fix[auth]: reject invalid session cookie
+  docs: update setup instructions
+
+Allowed types:
+  feat, fix, docs, style, refactor, test, chore, build, ci, perf, revert
+EOF
+  exit 1
+fi
+
+summary="${header#*: }"
+summary_len="$(printf '%s' "$summary" | wc -m | tr -d ' ')"
+
+if [ "$summary_len" -gt 50 ]; then
+  printf '%s\n' "Commit summary must be 50 characters or fewer." >&2
+  exit 1
+fi
+
+case "$summary" in
+  *.)
+    printf '%s\n' "Commit summary must not end with a period." >&2
+    exit 1
+    ;;
+esac

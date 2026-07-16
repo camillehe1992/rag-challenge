@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-dotenv
+httpx
+beautifulsoup4
+lxml
+jieba
+rank-bm25
+numpy
+faiss-cpu
+openai

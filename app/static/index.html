@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>THSS RAG Chatbot</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="login-view" class="panel auth-panel">
+        <h1>THSS RAG Chatbot</h1>
+        <form id="login-form" class="form">
+          <label>
+            用户名
+            <input id="username" name="username" autocomplete="username" required />
+          </label>
+          <label>
+            密码
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <button type="submit">登录</button>
+          <p id="login-error" class="error" hidden></p>
+        </form>
+      </section>
+
+      <section id="chat-view" class="panel chat-panel" hidden>
+        <header class="chat-header">
+          <div>
+            <h1>THSS RAG Chatbot</h1>
+            <p>清华大学软件学院网站问答</p>
+          </div>
+          <button id="logout-button" class="secondary" type="button">退出</button>
+        </header>
+
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <form id="chat-form" class="chat-form">
+          <textarea
+            id="message-input"
+            rows="3"
+            placeholder="输入关于清华软件学院网站的问题..."
+            required
+          ></textarea>
+          <button type="submit">发送</button>
+        </form>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
