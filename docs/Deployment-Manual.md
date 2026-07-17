@@ -30,6 +30,7 @@ Edit `.env` and set at least:
 - `DEMO_USERNAME` / `DEMO_PASSWORD`
 - `SESSION_SECRET`
 - `OPENAI_API_KEY` (optional; required for LLM answers and vector retrieval)
+- `SERVER_HOST` (IP address or domain name of the server)
 
 ## 3) Install Dependencies
 

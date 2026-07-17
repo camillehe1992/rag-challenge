@@ -3,7 +3,13 @@
 RAG challenge implementation for answering questions about the Tsinghua School of
 Software website.
 
-## Current Status
+## Goal
+
+Build a production-grade Retrieval-Augmented Generation (RAG) chatbot over the
+Tsinghua School of Software (THSS) website corpus, returning source-grounded
+answers with citations.
+
+## Features
 
 This repository currently contains the RAG application foundation:
 
@@ -14,74 +20,54 @@ This repository currently contains the RAG application foundation:
 - BM25 chunk indexing and retrieval
 - Retrieval-grounded chat responses with optional OpenAI generation
 
+## Tech Stack
+
+- Backend API: FastAPI + Uvicorn
+- Configuration: `python-dotenv` + `pydantic-settings`
+- Crawling & Parsing: `httpx` + `beautifulsoup4` + `lxml`
+- Storage: SQLite (`data/rag.sqlite3`)
+- Retrieval: BM25 (`rank-bm25`) + optional vector index (OpenAI Embeddings + `faiss-cpu`)
+- Tokenization: `jieba`
+- LLM: `openai` (optional, with fallback behavior)
+- Frontend: plain static HTML/CSS/JS served by FastAPI
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Q["Evaluation Questions (CSV)"] -->|source_url| C["Crawler"]
+  C --> DB["SQLite (pages, chunks)"]
+  DB --> I["Index Builder"]
+  I --> BM25["BM25 index"]
+  I -. optional .-> V["FAISS index"]
+  U["Chat UI"] --> API["FastAPI (/api/chat)"]
+  API --> R["Hybrid Retriever"]
+  R --> BM25
+  R -. optional .-> V
+  R --> G["Answer Generator"]
+  G -. optional .-> LLM["OpenAI"]
+  G --> API
+  API --> U
+```
+
+```text
+Crawler -> SQLite -> Chunker -> BM25 + Vector Index -> Retriever -> LLM -> FastAPI -> Static Chat UI
+```
+
 ## Quick Start
 
-Use Python 3.10 for local development. The deployment server runs Python 3.10,
-so developing against the same version avoids package and syntax drift.
+See [Local Development](docs/Local-Development.md) for Python/Docker setup and
+local run commands.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python -m uvicorn app.main:app --reload
-```
+## Deployment
 
-Then open:
+For a manual deployment walkthrough on a remote server, see
+[Manual Deployment](docs/Deployment-Manual.md).
 
-```text
-http://localhost:8000/
-```
+## Crawl & Index
 
-Health check:
-
-```text
-http://localhost:8000/api/health
-```
-
-## Docker
-
-Docker is the recommended way to eliminate local macOS vs remote Linux runtime
-differences.
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-The app will be available at:
-
-```text
-http://localhost:8000/
-```
-
-If Docker Hub times out while pulling `python:3.10-slim`, set `PYTHON_IMAGE`
-in `.env` to an accessible Python 3.10 image mirror or to a local image tag:
-
-```bash
-PYTHON_IMAGE=your-python-3.10-slim-image docker compose build
-docker compose up
-```
-
-You can also pre-pull and tag an image locally:
-
-```bash
-docker pull your-python-3.10-slim-image
-docker tag your-python-3.10-slim-image python:3.10-slim
-docker compose build
-```
-
-## Crawl Evaluation Sources
-
-The crawler ingests Source URLs from the evaluation question set into SQLite.
-See [Crawler Data Ingestion](docs/Crawler-Data-Ingestion.md) for commands,
-database output, and the milestone result.
-
-## Build Retrieval Index
-
-The index builder turns crawled pages into chunks and a local BM25 index. See
-[Indexing And Retrieval](docs/Indexing-and-Retrieval.md) for build commands,
-smoke tests, and retriever output.
+- Crawl pages into SQLite: [Crawler Data Ingestion](docs/Crawler-Data-Ingestion.md)
+- Build retrieval indexes: [Indexing And Retrieval](docs/Indexing-and-Retrieval.md)
 
 ## Chat Pipeline
 
@@ -89,50 +75,31 @@ The chat API retrieves source chunks and returns citation-backed answers. See
 [Chat Pipeline](docs/Chat-Pipeline.md) for the request flow, fallback behavior,
 and API output shape.
 
-## Git Commit Setup
+## Evaluation
 
-This project uses Git hooks under `.githooks/` for local checks and commit message validation.
+See [Evaluation](docs/Evaluation.md) for:
 
-Set it up once after cloning:
+- Fetching the evaluation question set from the remote questions page into a local CSV.
+- Crawling Source URLs and building indexes.
+- Running `scripts/eval_questions.py` and collecting reports.
 
-```bash
-pip install -r requirements-dev.txt
-make setup-git
-```
+## Known Limitations
 
-Commit format:
+- Session storage is in-memory. Sessions are cleared when the server restarts.
+- Vector retrieval is optional and cost-sensitive. It requires OpenAI embeddings and is disabled unless explicitly enabled and configured.
+- The crawler and indexes generate local artifacts under `data/` which must not be committed.
+- The synthetic evaluation dataset generator is for debugging only and is not the official evaluation question set.
 
-```text
-<type>[scope]: short summary
-```
+## Challenge Constraints
 
-Examples:
-
-```text
-feat[rag]: add hybrid retriever
-fix[auth]: reject invalid session cookie
-docs: update setup instructions
-```
-
-Run the same checks manually:
-
-```bash
-python3 -m compileall app scripts
-python3 scripts/check_staged_files.py
-```
-
-The hooks also block protected files from being committed or pushed, including:
-
-- `.env`
-- `docs/RAG-Challenge-Brief.md`
-- `docs/RAG-Implementation-Plan.md`
-- generated data, database, index, cache, and log files
-
-## Architecture
-
-```text
-Crawler -> SQLite -> Chunker -> BM25 + Vector Index -> Retriever -> LLM -> FastAPI -> Static Chat UI
-```
+- Ethical crawling: respect `robots.txt`, use a clear User-Agent, and keep rate
+  limits conservative.
+- No data redistribution: do not commit raw crawled corpus, databases, or
+  generated indexes.
+- No secrets in Git: keep `.env`, server credentials, and API keys out of the
+  repository.
+- Cost control: vector retrieval requires query-time embeddings. It is disabled
+  by default unless explicitly enabled and properly configured.
 
 ## Notes
 
