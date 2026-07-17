@@ -126,6 +126,25 @@ textarea {
   padding: 18px 20px;
 }
 
+.chat-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.current-user {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.chat-error {
+  background: rgb(180 35 24 / 10%);
+  border-bottom: 1px solid rgb(180 35 24 / 20%);
+  color: var(--danger);
+  margin: 0;
+  padding: 10px 20px;
+}
+
 .chat-header p {
   color: var(--muted);
   margin: 4px 0 0;

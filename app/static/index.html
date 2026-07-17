@@ -13,7 +13,12 @@
         <form id="login-form" class="form">
           <label>
             用户名
-            <input id="username" name="username" autocomplete="username" required />
+            <input
+              id="username"
+              name="username"
+              autocomplete="username"
+              required
+            />
           </label>
           <label>
             密码
@@ -36,9 +41,15 @@
             <h1>THSS RAG Chatbot</h1>
             <p>清华大学软件学院网站问答</p>
           </div>
-          <button id="logout-button" class="secondary" type="button">退出</button>
+          <div class="chat-actions">
+            <span id="current-user" class="current-user" hidden></span>
+            <button id="logout-button" class="secondary" type="button">
+              退出
+            </button>
+          </div>
         </header>
 
+        <p id="chat-error" class="chat-error" role="status" hidden></p>
         <div id="messages" class="messages" aria-live="polite"></div>
 
         <form id="chat-form" class="chat-form">
