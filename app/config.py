@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-small"
+    openai_timeout_seconds: float = 30.0
 
     database_path: str = "data/rag.sqlite3"
     index_dir: str = "data/index"

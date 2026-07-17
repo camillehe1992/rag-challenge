@@ -62,6 +62,7 @@ class HybridRetriever:
                     model=self.settings.openai_embedding_model,
                     index=self._load_vector_index(),
                     top_k=50,
+                    timeout_seconds=self.settings.openai_timeout_seconds,
                 ),
                 top_k_candidates=120,
             )
@@ -203,11 +204,12 @@ def vector_search(
     model: str,
     index: faiss.Index,
     top_k: int,
+    timeout_seconds: float,
 ) -> dict[int, float]:
     if not api_key or top_k <= 0:
         return {}
     try:
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, timeout=timeout_seconds)
         response = client.embeddings.create(model=model, input=[query])
     except OpenAIError:
         return {}

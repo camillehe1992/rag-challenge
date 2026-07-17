@@ -247,6 +247,7 @@ class IndexBuilder:
             texts=texts,
             api_key=self.settings.openai_api_key,
             model=self.settings.openai_embedding_model,
+            timeout_seconds=self.settings.openai_timeout_seconds,
         )
         if embeddings is None:
             return
@@ -361,6 +362,7 @@ def embed_texts(
     texts: list[str],
     api_key: str,
     model: str,
+    timeout_seconds: float,
     batch_size: int = 64,
 ) -> list[list[float]] | None:
     if not texts:
@@ -369,7 +371,7 @@ def embed_texts(
     if not api_key:
         return None
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=timeout_seconds)
     vectors: list[list[float]] = []
     try:
         for start in range(0, len(texts), batch_size):
