@@ -21,6 +21,7 @@ from app.rag.cleaner import clean_text
 EVAL_SOURCE_RE = re.compile(r"\[Source\]\((https?://[^)]+)\)")
 DATE_RE = re.compile(r"(20\d{2}|19\d{2})[-年./](\d{1,2})[-月./](\d{1,2})")
 CATEGORY_RE = re.compile(r"当前位置[:：]\s*(.+)")
+BAD_TITLE_TEXT = {"分享到", "分享", "关闭", "打印", "上一篇", "下一篇"}
 
 DEFAULT_USER_AGENT = (
     "THSS-RAG-Challenge-Crawler/1.0 "
@@ -325,18 +326,37 @@ def parse_page(url: str, html: str, status_code: int = 200) -> CrawledPage:
 
 
 def extract_title(soup: BeautifulSoup) -> str:
-    for selector in ("h1", ".title", ".article-title", ".con-title"):
+    for attrs in (
+        {"name": "ArticleTitle"},
+        {"name": "title"},
+        {"property": "og:title"},
+    ):
+        meta = soup.find("meta", attrs=attrs)
+        if meta and meta.get("content"):
+            title = clean_title(str(meta["content"]))
+            if title:
+                return title
+
+    for selector in ("h1", "h2", "h3", ".article-title", ".con-title", ".title"):
         element = soup.select_one(selector)
         if element:
-            text = clean_text(element.get_text(" ", strip=True))
+            text = clean_title(element.get_text(" ", strip=True))
             if text:
                 return text
 
     if soup.title and soup.title.string:
-        title = clean_text(soup.title.string)
+        title = clean_title(soup.title.string)
         return re.split(r"[-_—|]", title)[0].strip() or title
 
     return ""
+
+
+def clean_title(text: str) -> str:
+    title = clean_text(text)
+    title = re.sub(r"\s+", " ", title).strip(" -_—|")
+    if not title or title in BAD_TITLE_TEXT:
+        return ""
+    return title
 
 
 def extract_date(soup: BeautifulSoup) -> str | None:

@@ -5,13 +5,14 @@ Software website.
 
 ## Current Status
 
-This repository currently contains the project skeleton:
+This repository currently contains the RAG application foundation:
 
 - FastAPI backend
 - Static HTML/CSS/JS chat UI
 - Demo login flow
-- RAG module placeholders
-- Crawler, index builder, and evaluation script entry points
+- SQLite crawler data ingestion
+- BM25 chunk indexing and retrieval
+- LLM answer generation placeholder
 
 ## Quick Start
 
@@ -75,6 +76,12 @@ docker compose build
 The crawler ingests Source URLs from the evaluation question set into SQLite.
 See [Crawler Data Ingestion](docs/Crawler-Data-Ingestion.md) for commands,
 database output, and the milestone result.
+
+## Build Retrieval Index
+
+The index builder turns crawled pages into chunks and a local BM25 index. See
+[Indexing And Retrieval](docs/Indexing-and-Retrieval.md) for build commands,
+smoke tests, and retriever output.
 
 ## Git Commit Setup
 

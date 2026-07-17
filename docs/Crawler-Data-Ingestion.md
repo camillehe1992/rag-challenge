@@ -96,13 +96,14 @@ The crawler is intentionally conservative:
 
 ## Step 4: Review The Milestone Output
 
-After this step, the project has a populated `pages` table that can be used by
-the next indexing phase.
+After this step, the project has a populated `pages` table with cleaned page
+content and article titles that can be used by the next indexing phase.
 
 Output:
 
 - `data/rag.sqlite3`
 - A populated `pages` table containing cleaned source pages.
+- Corrected article titles in `pages.title`.
 - A `crawl_errors` table for failed URLs that need retry or investigation.
 
-![Crawler pages table](images/crawler-pages-table.png)
+![Crawler pages table with corrected titles](images/crawler-pages-table.png)
