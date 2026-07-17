@@ -1,18 +1,33 @@
-from app.schemas import ChatResponse
+from app.rag.generator import AnswerGenerator
+from app.rag.retriever import HybridRetriever
+from app.schemas import ChatResponse, Source
 
 
 def answer_question(message: str, history: list[dict[str, str]] | None = None) -> ChatResponse:
-    """Temporary pipeline entry point.
-
-    The next phases will connect this function to retrieval and LLM generation.
-    Keeping the API stable now lets the frontend and backend evolve separately.
-    """
     _ = history or []
+    retriever = HybridRetriever()
+    generator = AnswerGenerator()
+
+    try:
+        contexts = retriever.retrieve(message, top_k=5)
+    except FileNotFoundError:
+        return ChatResponse(
+            answer=(
+                "还没有可用的检索索引。请先运行 "
+                "`python scripts/build_index.py` 构建 BM25 索引。"
+            ),
+            sources=[],
+        )
+
+    answer = generator.generate(message, contexts)
     return ChatResponse(
-        answer=(
-            "RAG pipeline skeleton is ready. Next step: crawl THSS pages, "
-            "build the index, then replace this placeholder with retrieved "
-            f"context for your question: {message}"
-        ),
-        sources=[],
+        answer=answer,
+        sources=[
+            Source(
+                title=context["title"],
+                url=context["url"],
+                snippet=context.get("snippet"),
+            )
+            for context in contexts
+        ],
     )

@@ -12,7 +12,7 @@ This repository currently contains the RAG application foundation:
 - Demo login flow
 - SQLite crawler data ingestion
 - BM25 chunk indexing and retrieval
-- LLM answer generation placeholder
+- Retrieval-grounded chat responses with optional OpenAI generation
 
 ## Quick Start
 
@@ -82,6 +82,12 @@ database output, and the milestone result.
 The index builder turns crawled pages into chunks and a local BM25 index. See
 [Indexing And Retrieval](docs/Indexing-and-Retrieval.md) for build commands,
 smoke tests, and retriever output.
+
+## Chat Pipeline
+
+The chat API retrieves source chunks and returns citation-backed answers. See
+[Chat Pipeline](docs/Chat-Pipeline.md) for the request flow, fallback behavior,
+and API output shape.
 
 ## Git Commit Setup
 
