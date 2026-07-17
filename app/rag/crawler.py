@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import re
 import sqlite3
@@ -8,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urldefrag, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -299,7 +300,18 @@ class SiteCrawler:
 
 
 def extract_eval_source_urls(eval_file: str | Path) -> list[str]:
-    text = Path(eval_file).read_text(encoding="utf-8")
+    path = Path(eval_file)
+    if path.suffix.lower() == ".csv":
+        urls: list[str] = []
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                url = (row.get("source_url") or "").strip()
+                if url:
+                    urls.append(url)
+        return list(dict.fromkeys(urls))
+
+    text = path.read_text(encoding="utf-8")
     urls = EVAL_SOURCE_RE.findall(text)
     return list(dict.fromkeys(urls))
 
@@ -331,7 +343,7 @@ def extract_title(soup: BeautifulSoup) -> str:
         {"name": "title"},
         {"property": "og:title"},
     ):
-        meta = soup.find("meta", attrs=attrs)
+        meta = soup.find("meta", attrs=cast(Any, attrs))
         if meta and meta.get("content"):
             title = clean_title(str(meta["content"]))
             if title:
@@ -366,7 +378,7 @@ def extract_date(soup: BeautifulSoup) -> str | None:
         {"name": "PubDate"},
         {"property": "article:published_time"},
     ):
-        meta = soup.find("meta", attrs=attrs)
+        meta = soup.find("meta", attrs=cast(Any, attrs))
         if meta and meta.get("content"):
             candidates.append(str(meta["content"]))
 

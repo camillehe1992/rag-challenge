@@ -1,6 +1,5 @@
 BLOCKED_EXACT = {
     ".env",
-    "docs/Evaluation-Questions.md",
     "docs/RAG-Challenge-Brief.md",
     "docs/RAG-Implementation-Plan.md",
 }

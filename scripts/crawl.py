@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--from-eval",
         type=Path,
-        help="Extract Source URLs from an evaluation markdown file.",
+        help="Extract Source URLs from an evaluation file (CSV or Markdown).",
     )
     parser.add_argument(
         "--url",

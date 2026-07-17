@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import json
 import pickle
 import re
 import sqlite3
@@ -7,7 +9,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import faiss
 import jieba
+import numpy as np
+from openai import OpenAI, OpenAIError
 from rank_bm25 import BM25Okapi
 
 from app.config import Settings, get_settings
@@ -19,6 +24,8 @@ EVAL_TITLE_RE = re.compile(r"《([^》]+)》")
 TOKEN_RE = re.compile(r"[a-zA-Z0-9]+|[\u4e00-\u9fff]+")
 BAD_PAGE_TITLES = {"分享到", "分享"}
 BM25_INDEX_FILENAME = "bm25.pkl"
+FAISS_INDEX_FILENAME = "faiss.index"
+FAISS_META_FILENAME = "faiss_meta.json"
 
 
 @dataclass
@@ -37,7 +44,8 @@ class IndexBuilder:
         index_dir: str | Path | None = None,
         chunk_size: int = 800,
         chunk_overlap: int = 80,
-        eval_file: str | Path | None = "docs/Evaluation-Questions.md",
+        eval_file: str | Path | None = "data/evaluation_questions.csv",
+        build_vector_index: bool = False,
     ) -> None:
         self.settings = settings or get_settings()
         self.database_path = Path(database_path or self.settings.database_path)
@@ -45,6 +53,7 @@ class IndexBuilder:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.eval_file = Path(eval_file) if eval_file else None
+        self.build_vector_index = build_vector_index
 
     @property
     def index_path(self) -> Path:
@@ -98,7 +107,10 @@ class IndexBuilder:
                             now,
                         ),
                     )
-                    chunk_id = int(cursor.lastrowid)
+                    lastrowid = cursor.lastrowid
+                    if lastrowid is None:
+                        raise RuntimeError("Failed to insert chunk row.")
+                    chunk_id = int(lastrowid)
                     document = {
                         "chunk_id": chunk_id,
                         "page_url": page["url"],
@@ -117,6 +129,8 @@ class IndexBuilder:
 
             bm25 = BM25Okapi(tokenized_corpus)
             self._save_index(bm25, documents, tokenized_corpus, now)
+            if self.build_vector_index:
+                self._save_vector_index(documents, now)
 
             metadata = {
                 "built_at": now,
@@ -221,6 +235,45 @@ class IndexBuilder:
         with self.index_path.open("wb") as index_file:
             pickle.dump(payload, index_file)
 
+    def _save_vector_index(self, documents: list[dict], built_at: str) -> None:
+        if not self.settings.openai_api_key:
+            return
+
+        index_path = self.index_dir / FAISS_INDEX_FILENAME
+        meta_path = self.index_dir / FAISS_META_FILENAME
+
+        texts = [prepare_embedding_text(document) for document in documents]
+        embeddings = embed_texts(
+            texts=texts,
+            api_key=self.settings.openai_api_key,
+            model=self.settings.openai_embedding_model,
+        )
+        if embeddings is None:
+            return
+
+        vectors = np.asarray(embeddings, dtype="float32")
+        if vectors.ndim != 2 or vectors.shape[0] != len(documents):
+            return
+
+        faiss.normalize_L2(vectors)
+        dim = int(vectors.shape[1])
+        index = faiss.IndexFlatIP(dim)
+        index.add(vectors)
+        faiss.write_index(index, str(index_path))
+
+        meta = {
+            "version": 1,
+            "built_at": built_at,
+            "model": self.settings.openai_embedding_model,
+            "dimensions": dim,
+            "count": len(documents),
+            "metric": "ip",
+            "normalized": True,
+        }
+        meta_path.write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.database_path)
         conn.row_factory = sqlite3.Row
@@ -232,6 +285,17 @@ def load_eval_title_overrides(eval_file: Path | None) -> dict[str, str]:
         return {}
 
     overrides: dict[str, str] = {}
+    if eval_file.suffix.lower() == ".csv":
+        with eval_file.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                url = clean_text(str(row.get("source_url") or ""))
+                question_zh = str(row.get("question_zh") or "")
+                title_match = EVAL_TITLE_RE.search(question_zh)
+                if url and title_match:
+                    overrides[url] = clean_text(title_match.group(1))
+        return overrides
+
     pending_title: str | None = None
     for line in eval_file.read_text(encoding="utf-8").splitlines():
         title_match = EVAL_TITLE_RE.search(line)
@@ -278,3 +342,41 @@ def tokenize(text: str) -> list[str]:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def prepare_embedding_text(document: dict, max_chars: int = 6000) -> str:
+    parts = [
+        str(document.get("title") or ""),
+        str(document.get("date") or ""),
+        str(document.get("category") or ""),
+        str(document.get("content") or ""),
+    ]
+    text = "\n".join(part.strip() for part in parts if str(part).strip())
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars]
+
+
+def embed_texts(
+    texts: list[str],
+    api_key: str,
+    model: str,
+    batch_size: int = 64,
+) -> list[list[float]] | None:
+    if not texts:
+        return []
+
+    if not api_key:
+        return None
+
+    client = OpenAI(api_key=api_key)
+    vectors: list[list[float]] = []
+    try:
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            response = client.embeddings.create(model=model, input=batch)
+            ordered = sorted(response.data, key=lambda item: item.index)
+            vectors.extend([item.embedding for item in ordered])
+    except OpenAIError:
+        return None
+    return vectors

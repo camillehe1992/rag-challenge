@@ -20,6 +20,7 @@ def main() -> None:
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         eval_file=args.eval_file,
+        build_vector_index=args.with_vector,
     )
     summary = builder.build()
     print(
@@ -44,7 +45,7 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build the local BM25 retrieval index from crawled pages."
+        description="Build the local retrieval index from crawled pages."
     )
     parser.add_argument(
         "--database",
@@ -71,8 +72,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--eval-file",
         type=Path,
-        default=Path("docs/Evaluation-Questions.md"),
-        help="Evaluation markdown used to repair known Source URL titles.",
+        default=Path("data/evaluation_questions.csv"),
+        help="Evaluation dataset used to repair known Source URL titles.",
+    )
+    parser.add_argument(
+        "--with-vector",
+        action="store_true",
+        help="Also build a FAISS vector index using OpenAI embeddings (requires OPENAI_API_KEY).",
     )
     parser.add_argument(
         "--query",

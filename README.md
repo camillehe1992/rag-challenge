@@ -124,7 +124,6 @@ python3 scripts/check_staged_files.py
 The hooks also block protected files from being committed or pushed, including:
 
 - `.env`
-- `docs/Evaluation-Questions.md`
 - `docs/RAG-Challenge-Brief.md`
 - `docs/RAG-Implementation-Plan.md`
 - generated data, database, index, cache, and log files
@@ -138,7 +137,8 @@ Crawler -> SQLite -> Chunker -> BM25 + Vector Index -> Retriever -> LLM -> FastA
 ## Notes
 
 - Raw crawled corpus and generated indexes should stay under `data/` and should
-  not be committed.
+  not be committed. The evaluation dataset is generated locally into
+  `data/evaluation_questions.csv`.
 - Demo credentials are configured through `.env`.
 - The first implementation uses FastAPI-hosted static HTML/CSS/JS. A Vue
   rewrite can be added later without changing the RAG API.
