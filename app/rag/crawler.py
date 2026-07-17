@@ -5,12 +5,13 @@ import hashlib
 import re
 import sqlite3
 import time
+from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import urldefrag, urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urldefrag, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -28,6 +29,43 @@ DEFAULT_USER_AGENT = (
     "THSS-RAG-Challenge-Crawler/1.0 "
     "(educational retrieval project; respectful rate limited)"
 )
+
+SKIP_EXTENSIONS = {
+    ".7z",
+    ".avi",
+    ".bmp",
+    ".css",
+    ".doc",
+    ".docx",
+    ".gif",
+    ".gz",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".json",
+    ".m4a",
+    ".mkv",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".pdf",
+    ".png",
+    ".ppt",
+    ".pptx",
+    ".rar",
+    ".svg",
+    ".tar",
+    ".tgz",
+    ".webp",
+    ".wmv",
+    ".xls",
+    ".xlsx",
+    ".zip",
+}
+
+TRACKING_QUERY_PREFIXES = ("utm_",)
+TRACKING_QUERY_KEYS = {"spm", "from", "session", "jsessionid"}
 
 
 @dataclass
@@ -73,7 +111,8 @@ class SiteCrawler:
         self.rate_limit_seconds = rate_limit_seconds
         self.timeout_seconds = timeout_seconds
         self.respect_robots = respect_robots
-        self.source_netloc = urlparse(self.settings.source_base_url).netloc
+        self.source_netloc = urlparse(self.settings.source_base_url).netloc.lower()
+        self.allowed_netlocs = self._build_allowed_netlocs(self.source_netloc)
         self._last_request_at = 0.0
         self._robots: RobotFileParser | None = None
 
@@ -110,6 +149,63 @@ class SiteCrawler:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_pages_category ON pages(category)"
             )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_pages_content_hash ON pages(content_hash)"
+            )
+
+    def crawl_site(
+        self,
+        start_url: str | None = None,
+        max_pages: int | None = None,
+        force: bool = False,
+    ) -> CrawlSummary:
+        self.init_db()
+        seed = self.normalize_url(start_url or self.settings.source_base_url)
+        queue: deque[str] = deque([seed])
+        seen: set[str] = {seed}
+        summary = CrawlSummary(database_path=str(self.database_path))
+
+        while queue:
+            if (
+                max_pages is not None
+                and (summary.crawled + summary.skipped + summary.failed) >= max_pages
+            ):
+                break
+
+            url = queue.popleft()
+            summary.requested += 1
+
+            if not self.is_allowed_url(url):
+                self.record_error(url, "Skipped: outside configured source domain")
+                summary.skipped += 1
+                continue
+
+            if not force and self.page_exists(url):
+                summary.skipped += 1
+                continue
+
+            try:
+                page, html = self.crawl_url_raw(url)
+            except Exception as exc:  # noqa: BLE001 - errors are persisted for review.
+                status_code = (
+                    exc.response.status_code
+                    if isinstance(exc, httpx.HTTPStatusError)
+                    else None
+                )
+                self.record_error(url, str(exc), status_code)
+                summary.failed += 1
+                continue
+
+            self.save_page(page)
+            summary.crawled += 1
+
+            for discovered in self.extract_links(url, html):
+                if discovered in seen:
+                    continue
+                seen.add(discovered)
+                queue.append(discovered)
+
+        return summary
 
     def crawl_eval_sources(
         self,
@@ -162,6 +258,10 @@ class SiteCrawler:
         return summary
 
     def crawl_url(self, url: str) -> CrawledPage:
+        page, _ = self.crawl_url_raw(url)
+        return page
+
+    def crawl_url_raw(self, url: str) -> tuple[CrawledPage, str]:
         normalized_url = self.normalize_url(url)
         if not self.is_allowed_url(normalized_url):
             raise ValueError(f"URL outside configured source domain: {normalized_url}")
@@ -175,11 +275,14 @@ class SiteCrawler:
                 request=response.request,
                 response=response,
             )
+        content_type = str(response.headers.get("content-type") or "").lower()
+        if "text/html" not in content_type:
+            raise ValueError(f"Unsupported content-type: {content_type}")
 
         page = parse_page(normalized_url, response.text, response.status_code)
         if not page.content:
             raise ValueError("No article text extracted from page")
-        return page
+        return page, response.text
 
     def save_page(self, page: CrawledPage) -> None:
         now = utc_now()
@@ -245,14 +348,80 @@ class SiteCrawler:
         joined = urljoin(self.settings.source_base_url, url.strip())
         without_fragment, _ = urldefrag(joined)
         parsed = urlparse(without_fragment)
+        scheme = parsed.scheme.lower()
+        netloc = parsed.netloc.lower()
         path = parsed.path or "/"
-        return parsed._replace(path=path, query=parsed.query.strip()).geturl()
+
+        if netloc in self.allowed_netlocs and scheme == "http":
+            scheme = "https"
+
+        if path.lower().endswith("/index.html"):
+            path = path[: -len("/index.html")] or "/"
+        if path.lower().endswith("/index.htm"):
+            path = path[: -len("/index.htm")] or "/"
+        if path != "/" and path.endswith("/"):
+            path = path[:-1]
+
+        kept_params: list[tuple[str, str]] = []
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+            lowered = key.lower()
+            if lowered in TRACKING_QUERY_KEYS or lowered.startswith(
+                TRACKING_QUERY_PREFIXES
+            ):
+                continue
+            kept_params.append((key, value))
+        kept_params.sort(key=lambda item: (item[0], item[1]))
+        query = urlencode(kept_params, doseq=True)
+
+        return parsed._replace(
+            scheme=scheme,
+            netloc=netloc,
+            path=path,
+            query=query,
+        ).geturl()
 
     def is_allowed_url(self, url: str) -> bool:
         parsed = urlparse(url)
-        return (
-            parsed.scheme in {"http", "https"} and parsed.netloc == self.source_netloc
-        )
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        netloc = parsed.netloc.lower()
+        if netloc not in self.allowed_netlocs:
+            return False
+        if self._is_asset_path(parsed.path):
+            return False
+        return True
+
+    def extract_links(self, base_url: str, html: str) -> list[str]:
+        soup = BeautifulSoup(html, "lxml")
+        links: list[str] = []
+        for anchor in soup.select("a[href]"):
+            href = str(anchor.get("href") or "").strip()
+            if not href or href.startswith("#"):
+                continue
+            lowered = href.lower()
+            if lowered.startswith(("mailto:", "tel:", "javascript:")):
+                continue
+            normalized = self.normalize_url(urljoin(base_url, href))
+            if self.is_allowed_url(normalized):
+                links.append(normalized)
+        return list(dict.fromkeys(links))
+
+    def _is_asset_path(self, path: str) -> bool:
+        lowered = path.lower()
+        for suffix in SKIP_EXTENSIONS:
+            if lowered.endswith(suffix):
+                return True
+        return False
+
+    @staticmethod
+    def _build_allowed_netlocs(source_netloc: str) -> set[str]:
+        source_netloc = source_netloc.lower()
+        netlocs = {source_netloc}
+        if source_netloc.startswith("www."):
+            netlocs.add(source_netloc[4:])
+        else:
+            netlocs.add(f"www.{source_netloc}")
+        return netlocs
 
     def can_fetch(self, url: str) -> bool:
         robots = self._get_robots()

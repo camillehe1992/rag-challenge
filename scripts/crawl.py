@@ -19,6 +19,29 @@ def main() -> None:
         respect_robots=not args.ignore_robots,
     )
 
+    if args.full_site:
+        start_url = args.start_url or crawler.settings.source_base_url
+        start_url = crawler.normalize_url(start_url)
+        if args.dry_run:
+            limit_label = args.limit if args.limit is not None else "unlimited"
+            print(f"Full-site crawl seed: {start_url} (max_pages={limit_label})")
+            return
+
+        summary = crawler.crawl_site(
+            start_url=start_url,
+            max_pages=args.limit,
+            force=args.force,
+        )
+        print(
+            "Crawl complete: "
+            f"requested={summary.requested}, "
+            f"crawled={summary.crawled}, "
+            f"skipped={summary.skipped}, "
+            f"failed={summary.failed}, "
+            f"database={summary.database_path}"
+        )
+        return
+
     urls: list[str] = []
     if args.from_eval:
         urls.extend(extract_eval_source_urls(args.from_eval))
@@ -52,6 +75,15 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Crawl THSS pages into the local SQLite RAG database."
+    )
+    parser.add_argument(
+        "--full-site",
+        action="store_true",
+        help="Crawl the whole site by extracting links starting from --start-url.",
+    )
+    parser.add_argument(
+        "--start-url",
+        help="Start URL for --full-site. Defaults to SOURCE_BASE_URL from settings.",
     )
     parser.add_argument(
         "--from-eval",
