@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$PROJECT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
 
-VENV_DIR="${VENV_DIR:-$PROJECT_DIR/.venv}"
+VENV_DIR="${VENV_DIR:-$ROOT_DIR/.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 SERVICE_NAME="${SERVICE_NAME:-thss-rag}"
 SERVICE_USER="${SERVICE_USER:-$(id -un)}"
-FETCH_EVAL_DATASET="${FETCH_EVAL_DATASET:-1}"
-EVAL_URL="${EVAL_URL:-}"
 CRAWL_FULL_SITE="${CRAWL_FULL_SITE:-1}"
 CRAWL_LIMIT="${CRAWL_LIMIT:-850}"
 BUILD_VECTOR_INDEX="${BUILD_VECTOR_INDEX:-0}"
 INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-1}"
 WRITE_NGINX_SNIPPET="${WRITE_NGINX_SNIPPET:-1}"
-DEPLOY_DIR="${DEPLOY_DIR:-$PROJECT_DIR/deploy}"
-SYSTEMD_UNIT_PREVIEW_PATH="$DEPLOY_DIR/${SERVICE_NAME}.service"
-NGINX_SNIPPET_PATH="$DEPLOY_DIR/nginx-${SERVICE_NAME}.conf.snippet"
+DEPLOY_DIR="${DEPLOY_DIR:-$ROOT_DIR/deploy}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-$DEPLOY_DIR/generated}"
+SYSTEMD_UNIT_PREVIEW_PATH="$ARTIFACTS_DIR/${SERVICE_NAME}.service"
+NGINX_SNIPPET_PATH="$ARTIFACTS_DIR/nginx-${SERVICE_NAME}.conf.snippet"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%F %T')" "$*"
@@ -32,14 +32,45 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "缺少命令: $1"
 }
 
+run_with_progress() {
+  local label="$1"
+  shift
+  local start_ts
+  start_ts="$(date +%s)"
+
+  "$@" &
+  local pid=$!
+
+  if [[ -t 1 ]]; then
+    while kill -0 "$pid" >/dev/null 2>&1; do
+      local now_ts elapsed
+      now_ts="$(date +%s)"
+      elapsed=$((now_ts - start_ts))
+      printf "\r[%s] %s... (%ds)" "$(date '+%F %T')" "$label" "$elapsed"
+      sleep 2
+    done
+    echo
+  else
+    while kill -0 "$pid" >/dev/null 2>&1; do
+      local now_ts elapsed
+      now_ts="$(date +%s)"
+      elapsed=$((now_ts - start_ts))
+      log "${label}... (${elapsed}s)"
+      sleep 15
+    done
+  fi
+
+  wait "$pid"
+}
+
 load_env() {
-  if [[ ! -f "$PROJECT_DIR/.env" ]]; then
-    cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
-    fail "已创建 .env，请先编辑以下变量后再重新运行：DEMO_USERNAME、DEMO_PASSWORD、SESSION_SECRET、SERVER_HOST"
+  if [[ ! -f "$ROOT_DIR/.env" ]]; then
+    cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
+    fail "已创建 .env，请先编辑以下变量后再重新运行：DEMO_USERNAME、DEMO_PASSWORD、SESSION_SECRET"
   fi
 
   set -a
-  source "$PROJECT_DIR/.env"
+  source "$ROOT_DIR/.env"
   set +a
 
   [[ -n "${DEMO_USERNAME:-}" ]] || fail ".env 中缺少 DEMO_USERNAME"
@@ -57,48 +88,31 @@ create_venv() {
   pip install -r requirements.txt
 }
 
-fetch_eval_dataset() {
-  if [[ "$FETCH_EVAL_DATASET" != "1" ]]; then
-    log "跳过评测集抓取（FETCH_EVAL_DATASET=$FETCH_EVAL_DATASET）"
-    return
-  fi
-
-  if [[ -z "${SERVER_HOST:-}" || "${SERVER_HOST}" == "xxx.xxx.xxx.xxx" ]]; then
-    log "跳过评测集抓取：.env 中 SERVER_HOST 未设置为真实服务器地址"
-    return
-  fi
-
-  local url
-  url="${EVAL_URL:-https://${SERVER_HOST}:8443/questions.html}"
-
-  log "抓取评测数据集"
-  if ! "$VENV_DIR/bin/python" scripts/fetch_eval_questions.py \
-    --url "$url" \
-    --output data/evaluation_questions.csv \
-    --insecure; then
-    log "评测集抓取失败（可忽略），继续后续步骤。你也可以设置 FETCH_EVAL_DATASET=0 跳过。"
-  fi
-}
-
 crawl_and_build_index() {
   if [[ "$CRAWL_FULL_SITE" == "1" ]]; then
-    log "执行全站爬取"
-    "$VENV_DIR/bin/python" scripts/crawl.py --full-site --limit "$CRAWL_LIMIT"
+    log "执行全站爬取 (需要等待数分钟)"
+    run_with_progress \
+      "正在爬取数据（crawl.py --full-site）" \
+      "$VENV_DIR/bin/python" scripts/crawl.py --full-site --limit "$CRAWL_LIMIT"
   else
-    log "跳过全站爬取（CRAWL_FULL_SITE=$CRAWL_FULL_SITE）"
+    log "跳过全站爬取（CRAWL_FULL_SITE=${CRAWL_FULL_SITE}）"
   fi
 
   log "构建索引"
   if [[ "$BUILD_VECTOR_INDEX" == "1" ]]; then
     [[ -n "${OPENAI_API_KEY:-}" ]] || fail "BUILD_VECTOR_INDEX=1 时必须配置 OPENAI_API_KEY"
-    "$VENV_DIR/bin/python" scripts/build_index.py --with-vector
+    run_with_progress \
+      "正在构建索引（build_index.py --with-vector）" \
+      "$VENV_DIR/bin/python" scripts/build_index.py --with-vector
   else
-    "$VENV_DIR/bin/python" scripts/build_index.py
+    run_with_progress \
+      "正在构建索引（build_index.py）" \
+      "$VENV_DIR/bin/python" scripts/build_index.py
   fi
 }
 
 write_systemd_unit() {
-  mkdir -p "$DEPLOY_DIR"
+  mkdir -p "$ARTIFACTS_DIR"
   log "生成 systemd service 文件预览: $SYSTEMD_UNIT_PREVIEW_PATH"
 
   cat >"$SYSTEMD_UNIT_PREVIEW_PATH" <<EOF
@@ -109,8 +123,8 @@ After=network.target
 [Service]
 Type=simple
 User=${SERVICE_USER}
-WorkingDirectory=${PROJECT_DIR}
-EnvironmentFile=${PROJECT_DIR}/.env
+WorkingDirectory=${ROOT_DIR}
+EnvironmentFile=${ROOT_DIR}/.env
 ExecStart=${VENV_DIR}/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=2
@@ -120,7 +134,7 @@ WantedBy=multi-user.target
 EOF
 
   if [[ "$INSTALL_SYSTEMD" != "1" ]]; then
-    log "跳过 systemd 安装（INSTALL_SYSTEMD=$INSTALL_SYSTEMD）"
+    log "跳过 systemd 安装（INSTALL_SYSTEMD=${INSTALL_SYSTEMD}）"
     return
   fi
 
@@ -142,11 +156,11 @@ EOF
 
 write_nginx_snippet() {
   if [[ "$WRITE_NGINX_SNIPPET" != "1" ]]; then
-    log "跳过 Nginx 配置片段生成（WRITE_NGINX_SNIPPET=$WRITE_NGINX_SNIPPET）"
+    log "跳过 Nginx 配置片段生成（WRITE_NGINX_SNIPPET=${WRITE_NGINX_SNIPPET}）"
     return
   fi
 
-  mkdir -p "$DEPLOY_DIR"
+  mkdir -p "$ARTIFACTS_DIR"
   log "生成 Nginx 配置片段: $NGINX_SNIPPET_PATH"
 
   cat >"$NGINX_SNIPPET_PATH" <<EOF
@@ -203,10 +217,9 @@ print_validate_commands() {
 }
 
 main() {
-  log "开始部署，项目目录：$PROJECT_DIR"
+  log "开始部署，项目目录：$ROOT_DIR"
   load_env
   create_venv
-  fetch_eval_dataset
   crawl_and_build_index
   write_systemd_unit
   write_nginx_snippet

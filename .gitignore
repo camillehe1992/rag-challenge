@@ -12,6 +12,8 @@ venv/
 data/*
 !data/.gitkeep
 
+deploy/generated/
+
 docs/RAG-Challenge-Brief.md
 docs/RAG-Implementation-Plan.md
 

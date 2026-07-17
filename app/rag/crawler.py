@@ -115,6 +115,23 @@ class SiteCrawler:
         self.allowed_netlocs = self._build_allowed_netlocs(self.source_netloc)
         self._last_request_at = 0.0
         self._robots: RobotFileParser | None = None
+        self._client: httpx.Client | None = httpx.Client(
+            timeout=self.timeout_seconds,
+            follow_redirects=True,
+            headers={"User-Agent": self.user_agent},
+        )
+
+    def close(self) -> None:
+        if self._client is None:
+            return
+        self._client.close()
+        self._client = None
+
+    def __enter__(self) -> "SiteCrawler":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
 
     def init_db(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -451,13 +468,13 @@ class SiteCrawler:
             if elapsed < self.rate_limit_seconds:
                 time.sleep(self.rate_limit_seconds - elapsed)
 
-        headers = {"User-Agent": self.user_agent}
-        with httpx.Client(
-            timeout=self.timeout_seconds,
-            follow_redirects=True,
-            headers=headers,
-        ) as client:
-            response = client.get(url)
+        if self._client is None:
+            self._client = httpx.Client(
+                timeout=self.timeout_seconds,
+                follow_redirects=True,
+                headers={"User-Agent": self.user_agent},
+            )
+        response = self._client.get(url)
 
         self._last_request_at = time.monotonic()
         return response
