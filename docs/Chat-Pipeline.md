@@ -13,19 +13,8 @@ User question -> HybridRetriever -> top-k chunks -> AnswerGenerator -> ChatRespo
 
 ## Step 1: Build The Retrieval Index
 
-The chat pipeline expects a local BM25 index:
-
-```bash
-python scripts/build_index.py
-```
-
-Output:
-
-- `data/index/bm25.pkl`
-- `chunks` and `index_metadata` tables in `data/rag.sqlite3`
-
-If the index file does not exist, `/api/chat` returns a clear setup message
-instead of failing with a server error.
+The chat pipeline expects a local retrieval index. Follow the setup steps in
+[Indexing And Retrieval](Indexing-and-Retrieval.md) before using `/api/chat`.
 
 ## Step 2: Retrieve Contexts
 
@@ -74,6 +63,15 @@ The FastAPI `/api/chat` endpoint returns:
 
 The static chat UI already renders `sources` as clickable links below the
 assistant message.
+
+## API Contract (Minimal)
+
+- Authentication: `/api/chat` requires a valid session cookie set by
+  `POST /api/login`. If the session is missing or expired, the API returns 401.
+- Request: `POST /api/chat`
+  - JSON body: `{ "message": "<user text>", "history": [{"role": "...", "content": "..."}] }`
+  - Validation: empty `message` is rejected with a 422 validation error.
+- Response: `200 OK` with `{ "answer": "...", "sources": [...] }` as shown above.
 
 ## Milestone Output
 

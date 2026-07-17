@@ -1,15 +1,22 @@
 # Indexing And Retrieval
 
 This document describes the second RAG milestone: converting crawled pages into
-retrievable chunks and building a BM25 keyword index for source-grounded search.
+retrievable chunks and building keyword + embedding indexes for source-grounded search.
 
 ## Goal
 
 The indexing phase turns cleaned pages into chunk-level search results.
 
 ```text
-SQLite pages -> chunks table -> BM25 index -> top-k source snippets
+SQLite pages -> chunks table -> BM25 + FAISS index -> top-k source snippets
 ```
+
+## Prerequisites
+
+- Crawl THSS pages into `data/rag.sqlite3` first (see
+  [Crawler Data Ingestion](Crawler-Data-Ingestion.md)).
+- Generate `data/evaluation_questions.csv` if you want title overrides (see
+  [Evaluation Questions Generation](Evaluation-Questions-Generation.md)).
 
 ## Step 1: Build Chunks And BM25 Index
 
@@ -30,6 +37,7 @@ It writes:
 - `chunks` table in `data/rag.sqlite3`
 - `index_metadata` table in `data/rag.sqlite3`
 - `data/index/bm25.pkl`
+- `data/index/faiss.index` (only when `--with-vector` is set and `OPENAI_API_KEY` is available)
 
 Output:
 
@@ -45,8 +53,9 @@ The `chunks` table contains chunk-level retrieval records generated from
 ## Step 2: Repair Evaluation Titles
 
 Some THSS pages expose share-widget text where an article title is expected. The
-index builder uses `docs/Evaluation-Questions.md` as an optional title override
+index builder uses `data/evaluation_questions.csv` as an optional title override
 source by matching each question's Source URL.
+Generate the CSV locally if it is missing (see `docs/Evaluation-Questions-Generation.md`).
 
 This helps title-heavy evaluation questions such as:
 
@@ -109,6 +118,19 @@ Each result contains:
 - `category`
 - `chunk_id`
 - `chunk_index`
+
+## Retrieval Strategy (Current)
+
+`HybridRetriever` ranks chunks using:
+
+- BM25 keyword search over chunk text.
+- A title boost when the query contains (or closely matches) the page title.
+- Optional FAISS vector similarity when:
+  - `data/index/faiss.index` exists, and
+  - `OPENAI_API_KEY` is configured (query-time embeddings), or vector retrieval is explicitly forced.
+
+When enabled, the current implementation merges candidates using the weighted
+score described in the implementation plan (title 0.5, BM25 0.3, vector 0.2).
 
 ## Milestone Output
 
