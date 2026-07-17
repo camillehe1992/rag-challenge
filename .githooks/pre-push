@@ -3,4 +3,4 @@ set -eu
 
 PYTHON_BIN="${PYTHON:-python3}"
 
-"$PYTHON_BIN" scripts/check_protected_push.py
+"$PYTHON_BIN" scripts/githooks/check_protected_push.py

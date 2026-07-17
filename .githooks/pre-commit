@@ -4,4 +4,4 @@ set -eu
 PYTHON_BIN="${PYTHON:-python3}"
 
 "$PYTHON_BIN" -m compileall app scripts
-"$PYTHON_BIN" scripts/check_staged_files.py
+"$PYTHON_BIN" scripts/githooks/check_staged_files.py
