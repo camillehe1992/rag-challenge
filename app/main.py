@@ -17,6 +17,7 @@ from app.auth import (
     set_session_cookie,
     validate_credentials,
 )
+from app.config import get_settings
 from app.rag.pipeline import answer_question
 from app.schemas import ChatRequest, ChatResponse, LoginRequest, LoginResponse
 
@@ -24,9 +25,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="THSS RAG Chatbot")
 
+_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "https://localhost:8443"],
+    allow_origins=_settings.cors_allow_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,16 +70,17 @@ def login(
         )
 
     token = create_session_token(settings)
-    set_session_cookie(response, token)
+    set_session_cookie(response, token, settings)
     return LoginResponse(ok=True, username=payload.username)
 
 
 @app.post("/api/logout")
 def logout(
     response: Response,
+    settings: SettingsDep,
     session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
 ) -> dict[str, bool]:
-    revoke_session_token(session_token)
+    revoke_session_token(session_token, settings)
     clear_session_cookie(response)
     return {"ok": True}
 

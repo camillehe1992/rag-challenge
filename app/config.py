@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     demo_username: str = "admin"
     demo_password: str = "change-me"
     session_secret: str = "dev-session-secret"
+    session_ttl_seconds: int = 60 * 60 * 8
+    cookie_secure: bool = False
+    cors_allow_origins: str = "http://localhost:8000,https://localhost:8443"
 
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4o-mini"
@@ -28,6 +31,10 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def cors_allow_origins_list(self) -> list[str]:
+        return [item.strip() for item in self.cors_allow_origins.split(",") if item.strip()]
 
 
 @lru_cache
