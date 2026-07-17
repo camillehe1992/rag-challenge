@@ -64,7 +64,10 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch THSS pages and generate data/evaluation_questions.csv."
+        description=(
+            "Generate a synthetic evaluation dataset by discovering THSS articles and "
+            "building question rows into data/evaluation_questions.csv."
+        )
     )
     parser.add_argument(
         "--output",
@@ -161,9 +164,7 @@ def discover_article_urls(
                     queue.append(normalized)
 
     if not article_urls:
-        raise RuntimeError(
-            "No article URLs discovered. Provide more --seed-url values."
-        )
+        raise RuntimeError("No article URLs discovered. Provide more --seed-url values.")
     return article_urls[:target_count]
 
 
@@ -204,9 +205,7 @@ def build_questions(
             if response.status_code >= 400:
                 continue
 
-            page = parse_page(
-                url=url, html=response.text, status_code=response.status_code
-            )
+            page = parse_page(url=url, html=response.text, status_code=response.status_code)
             title = page.title.strip() or url
             date = page.date or ""
             section = page.category or ""
@@ -265,9 +264,7 @@ def build_meta(
 def write_csv(path: Path, rows: list[EvalRow]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle, fieldnames=list(EvalRow.__dataclass_fields__.keys())
-        )
+        writer = csv.DictWriter(handle, fieldnames=list(EvalRow.__dataclass_fields__.keys()))
         writer.writeheader()
         for row in rows:
             writer.writerow(asdict(row))
@@ -275,3 +272,4 @@ def write_csv(path: Path, rows: list[EvalRow]) -> None:
 
 if __name__ == "__main__":
     main()
+
