@@ -70,6 +70,12 @@ docker tag your-python-3.10-slim-image python:3.10-slim
 docker compose build
 ```
 
+## Crawl Evaluation Sources
+
+The crawler ingests Source URLs from the evaluation question set into SQLite.
+See [Crawler Data Ingestion](docs/Crawler-Data-Ingestion.md) for commands,
+database output, and the milestone result.
+
 ## Git Commit Setup
 
 This project uses Git hooks under `.githooks/` for local checks and commit message validation.
