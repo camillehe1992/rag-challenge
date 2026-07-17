@@ -18,7 +18,7 @@ evaluation_questions.csv -> Source URLs -> THSS pages -> cleaned text -> SQLite
 ### Step 1: Extract Source URLs
 
 Use the Source URLs embedded in the evaluation dataset file. Generate the file
-first if it does not exist (see `docs/Evaluation-Questions-Generation.md`).
+first if it does not exist (see `docs/Evaluation.md`).
 
 ```bash
 python scripts/crawl.py --from-eval data/evaluation_questions.csv --limit 50

@@ -16,7 +16,7 @@ SQLite pages -> chunks table -> BM25 + FAISS index -> top-k source snippets
 - Crawl THSS pages into `data/rag.sqlite3` first (see
   [Crawler Data Ingestion](Crawler-Data-Ingestion.md)).
 - Generate `data/evaluation_questions.csv` if you want title overrides (see
-  [Evaluation Questions Generation](Evaluation-Questions-Generation.md)).
+  [Evaluation](Evaluation.md)).
 
 ## Step 1: Build Chunks And BM25 Index
 
@@ -55,7 +55,7 @@ The `chunks` table contains chunk-level retrieval records generated from
 Some THSS pages expose share-widget text where an article title is expected. The
 index builder uses `data/evaluation_questions.csv` as an optional title override
 source by matching each question's Source URL.
-Generate the CSV locally if it is missing (see `docs/Evaluation-Questions-Generation.md`).
+Generate the CSV locally if it is missing (see `docs/Evaluation.md`).
 
 This helps title-heavy evaluation questions such as:
 
