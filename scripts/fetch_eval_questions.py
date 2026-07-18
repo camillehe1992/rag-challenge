@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -232,6 +233,173 @@ def parse_markdown_style(lines: list[str]) -> list[EvalRow]:
     return rows
 
 
+def extract_js_const_array(html: str, const_name: str) -> str | None:
+    match = re.search(rf"\bconst\s+{re.escape(const_name)}\s*=\s*", html)
+    if not match:
+        return None
+
+    start = html.find("[", match.end())
+    if start < 0:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(html)):
+        ch = html[i]
+        if in_string:
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if ch == '"':
+                in_string = False
+                continue
+            continue
+
+        if ch == '"':
+            in_string = True
+            continue
+        if ch == "[":
+            depth += 1
+            continue
+        if ch == "]":
+            depth -= 1
+            if depth == 0:
+                return html[start : i + 1]
+
+    return None
+
+
+def build_meta(
+    answer_type_en: str,
+    answer_type_zh: str,
+    date: str,
+    section: str,
+    url: str,
+) -> str:
+    type_part = answer_type_en
+    if answer_type_zh:
+        type_part = (
+            f"{answer_type_en} / {answer_type_zh}" if answer_type_en else answer_type_zh
+        )
+    return f"{type_part} · {date} · {section} · [Source]({url})"
+
+
+def js_object_literal_to_json(text: str) -> str:
+    output: list[str] = []
+    in_string = False
+    string_quote = ""
+    escaped = False
+
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            output.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == string_quote:
+                in_string = False
+                string_quote = ""
+            i += 1
+            continue
+
+        if ch in ('"', "'"):
+            in_string = True
+            string_quote = ch
+            output.append(ch)
+            i += 1
+            continue
+
+        if ch.isalpha() or ch == "_":
+            start = i
+            i += 1
+            while i < len(text) and (text[i].isalnum() or text[i] == "_"):
+                i += 1
+            token = text[start:i]
+            j = i
+            while j < len(text) and text[j].isspace():
+                j += 1
+            if j < len(text) and text[j] == ":":
+                output.append(f'"{token}":')
+                i = j + 1
+                continue
+            output.append(token)
+            continue
+
+        if ch == ",":
+            j = i + 1
+            while j < len(text) and text[j].isspace():
+                j += 1
+            if j < len(text) and text[j] in "}]":
+                i += 1
+                continue
+
+        output.append(ch)
+        i += 1
+
+    return "".join(output)
+
+
+def parse_questions_data_style(html: str) -> list[EvalRow]:
+    array_text = extract_js_const_array(html, "QUESTIONS_DATA")
+    if not array_text:
+        return []
+
+    payload = json.loads(js_object_literal_to_json(array_text))
+    if not isinstance(payload, list):
+        return []
+
+    type_zh_map = {
+        "date": "日期",
+        "count": "数量",
+        "topic": "主题",
+    }
+
+    rows: list[EvalRow] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+
+        id_text = str(item.get("id") or "").strip()
+        if not id_text.isdigit():
+            continue
+        number = int(id_text)
+
+        question_zh = str(item.get("question_zh") or "").strip()
+        question_en = str(item.get("question_en") or "").strip()
+        source_url = str(item.get("source_url") or "").strip()
+        if not source_url:
+            continue
+
+        answer_type_en = str(item.get("category") or "").strip()
+        answer_type_zh = type_zh_map.get(answer_type_en, "")
+        date = str(item.get("source_date") or "").strip()
+        section = str(item.get("source_column") or "").strip()
+        meta_raw = build_meta(answer_type_en, answer_type_zh, date, section, source_url)
+
+        rows.append(
+            EvalRow(
+                id=number,
+                question_zh=question_zh,
+                question_en=question_en,
+                answer_type_en=answer_type_en,
+                answer_type_zh=answer_type_zh,
+                date=date,
+                section=section,
+                source_url=source_url,
+                meta_raw=meta_raw,
+            )
+        )
+
+    return sorted(rows, key=lambda item: item.id)
+
+
 def parse_meta(meta: str) -> tuple[str, str, str, str, str]:
     source_match = SOURCE_RE.search(meta)
     if not source_match:
@@ -281,6 +449,8 @@ def main() -> None:
 
     soup = BeautifulSoup(html, "lxml")
     rows = parse_table_style(soup)
+    if not rows:
+        rows = parse_questions_data_style(html)
     if not rows:
         lines = extract_lines_from_html(html)
         rows = parse_markdown_style(lines)
