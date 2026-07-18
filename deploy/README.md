@@ -21,7 +21,7 @@ cp .env.example .env
 
 - `DEMO_USERNAME` / `DEMO_PASSWORD`
 - `SESSION_SECRET`
-- `SERVER_HOST`（用于评测集抓取时拼接 `https://<SERVER_HOST>:8443/questions.html`）
+- `SSH_HOST`（用于评测集抓取时拼接 `https://<SSH_HOST>:8443/questions.html`，也用于本地一键部署的 SSH 连接）
 - `OPENAI_API_KEY`（可选；仅在向量检索或 LLM 生成开启时需要）
 
 注意：`.env` 不应提交到 Git。
@@ -120,6 +120,37 @@ docker compose -f docker-compose.yml -f deploy/docker-compose.data.yml run --rm 
   bash -lc 'python scripts/crawl.py --full-site --limit 850 --rate-limit 0.75 --database "$DATABASE_PATH" && python scripts/build_index.py --database "$DATABASE_PATH" --index-dir "$INDEX_DIR"'
 ```
 
+### 2.5 （可选）本地一键部署到远端并重启服务
+
+如果你希望把本地工作区（未提交改动也会同步）一键发布到远端服务器，并重启 systemd 服务，可以使用 `deploy/deploy_to_server.sh`。
+
+脚本会：
+
+- 使用 `rsync` 将本地代码同步到远端目录（默认排除 `.git/`、`.venv/`、`data/`、`.env` 等）
+- 在远端创建/更新虚拟环境并安装依赖（可开关）
+- `sudo systemctl restart <service>` 重启服务（可开关）
+
+示例：
+
+```bash
+chmod +x deploy/deploy_to_server.sh
+
+SSH_HOST=<YOUR_SERVER_HOST> \
+SSH_USER=ubuntu \
+./deploy/deploy_to_server.sh
+```
+
+常用参数（环境变量）：
+
+- SSH：`SSH_HOST`（必填）、`SSH_USER`、`SSH_PORT`、`SSH_KEY_PATH`
+- 远端路径：`REMOTE_DIR`、`REMOTE_VENV_DIR`
+- 服务：`REMOTE_SERVICE_NAME`
+- 行为开关：`REMOTE_PIP_INSTALL=0`、`REMOTE_SYSTEMD_RESTART=0`、`RSYNC_DELETE=1`
+
+默认值说明：
+
+- 若未指定 `REMOTE_DIR`/`REMOTE_SERVICE_NAME`，脚本会优先从 `docs/Deployment-Manual.md` 的示例配置中自动推断；推断失败时再使用内置默认值。
+
 ## 3. 抓取评测集（questions.html -> CSV）
 
 在仓库根目录执行：
@@ -131,7 +162,7 @@ chmod +x deploy/fetch_eval_dataset.sh
 
 默认会：
 
-- 下载 `https://<SERVER_HOST>:8443/questions.html` 到 `data/evaluation_questions.html`
+- 下载 `https://<SSH_HOST>:8443/questions.html` 到 `data/evaluation_questions.html`
 - 解析本地 HTML 并生成 `data/evaluation_questions.csv`
 
 可选参数：
@@ -161,7 +192,7 @@ chmod +x deploy/run_evaluation.sh
 - 开启向量检索：`EVAL_USE_VECTOR=1`（需要向量索引文件 + `OPENAI_API_KEY`）
 - 走 HTTP 模式评测线上服务：
   - `EVAL_METHOD=http`
-  - `EVAL_API_URL="https://<SERVER_HOST>:8443/api/chat"`（或内网 `http://127.0.0.1:8000/api/chat`）
+  - `EVAL_API_URL="https://<SSH_HOST>:8443/api/chat"`（或内网 `http://127.0.0.1:8000/api/chat`）
 
 ## 注意事项
 

@@ -30,7 +30,7 @@ Edit `.env` and set at least:
 - `DEMO_USERNAME` / `DEMO_PASSWORD`
 - `SESSION_SECRET`
 - `OPENAI_API_KEY` (optional; required for LLM answers and vector retrieval)
-- `SERVER_HOST` (IP address or domain name of the server)
+- `SSH_HOST` (IP address or domain name of the server)
 
 ## 3) Install Dependencies
 
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 
 ```bash
 python3 scripts/fetch_eval_questions.py \
-  --url "https://<SERVER_HOST>:8443/questions.html" \
+  --url "https://<SSH_HOST>:8443/questions.html" \
   --output data/evaluation_questions.csv \
   --insecure
 ```
@@ -169,19 +169,19 @@ sudo systemctl reload nginx
 ### Validate The Effect
 
 - Browser:
-  - `https://<SERVER_HOST>:8443/` redirects to `/chat`
-  - `https://<SERVER_HOST>:8443/chat` loads the chat UI
-  - `https://<SERVER_HOST>:8443/api/health` returns `{"status": "ok", ...}`
+  - `https://<SSH_HOST>:8443/` redirects to `/chat`
+  - `https://<SSH_HOST>:8443/chat` loads the chat UI
+  - `https://<SSH_HOST>:8443/api/health` returns `{"status": "ok", ...}`
 - Command line (use `-k` for self-signed certificates):
 
 ```bash
-curl -k -I "https://<SERVER_HOST>:8443/" | head -n 5
-curl -k "https://<SERVER_HOST>:8443/api/health"
+curl -k -I "https://<SSH_HOST>:8443/" | head -n 5
+curl -k "https://<SSH_HOST>:8443/api/health"
 ```
 
 Notes:
 
-- The chat UI is exposed at `https://<SERVER_HOST>:8443/chat`.
+- The chat UI is exposed at `https://<SSH_HOST>:8443/chat`.
 - If you put Nginx in front of a streaming endpoint in the future, you may need
   `proxy_buffering off` for that location.
 

@@ -27,6 +27,7 @@ cp .env.example .env
 - `OPENAI_API_KEY`: required for LLM generation and vector retrieval
 - `OPENAI_CHAT_MODEL`: chat model name (default: `gpt-4o-mini`)
 - `OPENAI_EMBEDDING_MODEL`: embedding model name (default: `text-embedding-3-small`)
+- `OPENAI_TIMEOUT_SECONDS`: OpenAI request timeout in seconds (default: `30.0`)
 
 ## Data
 

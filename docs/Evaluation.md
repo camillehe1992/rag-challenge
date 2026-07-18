@@ -49,14 +49,14 @@ This repository does not commit `data/evaluation_questions.csv`. Instead, fetch 
 ### Remote Endpoint
 
 ```text
-https://<SERVER_HOST>:8443/questions.html
+https://<SSH_HOST>:8443/questions.html
 ```
 
 ### Fetch And Convert
 
 ```bash
 python3 scripts/fetch_eval_questions.py \
-  --url "https://<SERVER_HOST>:8443/questions.html" \
+  --url "https://<SSH_HOST>:8443/questions.html" \
   --output data/evaluation_questions.csv
 ```
 
@@ -157,4 +157,4 @@ python3 scripts/eval_questions.py --method pipeline --limit 50 --language zh --n
 ## Notes
 
 - Do not commit `data/evaluation_questions.csv`, `data/rag.sqlite3`, or `data/index/`.
-- Replace `<SERVER_HOST>` with your server host/IP locally; do not hardcode it in this repository.
+- Replace `<SSH_HOST>` with your server host/IP locally; do not hardcode it in this repository.

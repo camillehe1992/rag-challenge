@@ -50,8 +50,8 @@ main() {
   if [[ -n "$EVAL_URL" ]]; then
     url="$EVAL_URL"
   else
-    [[ -n "${SERVER_HOST:-}" && "${SERVER_HOST}" != "xxx.xxx.xxx.xxx" ]] || fail "请在 .env 中设置 SERVER_HOST，或通过 EVAL_URL 传入完整 URL"
-    url="https://${SERVER_HOST}:8443/questions.html"
+    [[ -n "${SSH_HOST:-}" && "${SSH_HOST}" != "xxx.xxx.xxx.xxx" ]] || fail "请在 .env 中设置 SSH_HOST，或通过 EVAL_URL 传入完整 URL"
+    url="https://${SSH_HOST}:8443/questions.html"
   fi
 
   require_cmd curl

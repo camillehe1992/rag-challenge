@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--url",
-        help="Remote questions page URL, for example: https://<SERVER_HOST>:8443/questions.html",
+        help="Remote questions page URL, for example: https://<SSH_HOST>:8443/questions.html",
     )
     parser.add_argument(
         "--input-html",
