@@ -10,6 +10,16 @@ SERVICE_NAME="${SERVICE_NAME:-thss-rag}"
 SERVICE_USER="${SERVICE_USER:-$(id -un)}"
 INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-1}"
 WRITE_NGINX_SNIPPET="${WRITE_NGINX_SNIPPET:-1}"
+
+NGINX_SITE_NAME="${NGINX_SITE_NAME:-thss-rag}"
+NGINX_AVAILABLE_PATH="${NGINX_AVAILABLE_PATH:-/etc/nginx/sites-available/${NGINX_SITE_NAME}.conf}"
+NGINX_ENABLED_PATH="${NGINX_ENABLED_PATH:-/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf}"
+NGINX_SERVER_NAME="${NGINX_SERVER_NAME:-_}"
+NGINX_LISTEN_PORT="${NGINX_LISTEN_PORT:-8443}"
+NGINX_SSL_CERT="${NGINX_SSL_CERT:-/etc/ssl/certs/ssl-cert-snakeoil.pem}"
+NGINX_SSL_KEY="${NGINX_SSL_KEY:-/etc/ssl/private/ssl-cert-snakeoil.key}"
+UPSTREAM_URL="${UPSTREAM_URL:-http://127.0.0.1:8000}"
+
 DEPLOY_DIR="${DEPLOY_DIR:-$ROOT_DIR/deploy}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-$DEPLOY_DIR/generated}"
 SYSTEMD_UNIT_PREVIEW_PATH="$ARTIFACTS_DIR/${SERVICE_NAME}.service"
@@ -22,6 +32,10 @@ log() {
 fail() {
   echo "ERROR: $*" >&2
   exit 1
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "缺少命令: $1"
 }
 
 ensure_venv() {
@@ -79,6 +93,9 @@ write_nginx_snippet() {
     return
   fi
 
+  require_cmd nginx
+  require_cmd sudo
+
   mkdir -p "$ARTIFACTS_DIR"
   log "生成 Nginx 配置片段: $NGINX_SNIPPET_PATH"
 
@@ -120,9 +137,34 @@ location ^~ /static/ {
 }
 EOF
 
-  log "请将上述片段合并到现有的 8443 server 块中，然后执行："
-  echo "sudo nginx -t"
-  echo "sudo systemctl reload nginx"
+  local tmp_path
+  tmp_path="/tmp/${NGINX_SITE_NAME}.conf.$$"
+
+  cat >"$tmp_path" <<EOF
+server {
+    listen ${NGINX_LISTEN_PORT} ssl;
+    server_name ${NGINX_SERVER_NAME};
+
+    ssl_certificate ${NGINX_SSL_CERT};
+    ssl_certificate_key ${NGINX_SSL_KEY};
+
+    include ${NGINX_SNIPPET_PATH};
+}
+EOF
+
+  log "写入 Nginx site 配置: ${NGINX_AVAILABLE_PATH}"
+  sudo mkdir -p "$(dirname "$NGINX_AVAILABLE_PATH")" "$(dirname "$NGINX_ENABLED_PATH")"
+  sudo mv "$tmp_path" "$NGINX_AVAILABLE_PATH"
+  sudo chmod 0644 "$NGINX_AVAILABLE_PATH"
+
+  log "启用 Nginx 配置: ${NGINX_ENABLED_PATH}"
+  sudo ln -sfn "$NGINX_AVAILABLE_PATH" "$NGINX_ENABLED_PATH"
+
+  log "校验 Nginx 配置"
+  sudo nginx -t
+
+  log "重载 Nginx"
+  sudo systemctl reload nginx
 }
 
 main() {

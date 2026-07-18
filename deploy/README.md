@@ -97,7 +97,22 @@ CRAWL_LIMIT=1 ./deploy/crawl_and_build_index.sh
 INSTALL_SYSTEMD=0 WRITE_NGINX_SNIPPET=0 ./deploy/configure_server.sh
 ```
 
-### 2.4 （可选）使用 Docker + Volume 持久化数据到宿主机
+### 2.4 （可选）Nginx（独立 site 配置文件）
+
+`configure_server.sh` 会在生成 `deploy/generated/nginx-<SERVICE_NAME>.conf.snippet` 的同时，自动创建/启用独立 Nginx site 配置文件并重载 Nginx：
+
+- `/etc/nginx/sites-available/thss-rag.conf`
+- `/etc/nginx/sites-enabled/thss-rag.conf`
+
+可选参数（环境变量）：
+
+- `NGINX_LISTEN_PORT=8443`
+- `NGINX_SERVER_NAME=_`
+- `NGINX_SSL_CERT=/path/to/fullchain.pem`
+- `NGINX_SSL_KEY=/path/to/privkey.pem`
+- `UPSTREAM_URL=http://127.0.0.1:8000`
+
+### 2.5 （可选）使用 Docker + Volume 持久化数据到宿主机
 
 如果你希望爬虫数据库与索引不落在仓库目录下，可以使用 Docker 的 named volume 持久化到宿主机（Docker 管理的 volume 路径）。
 
@@ -120,7 +135,7 @@ docker compose -f docker-compose.yml -f deploy/docker-compose.data.yml run --rm 
   bash -lc 'python scripts/crawl.py --full-site --limit 850 --rate-limit 0.75 --database "$DATABASE_PATH" && python scripts/build_index.py --database "$DATABASE_PATH" --index-dir "$INDEX_DIR"'
 ```
 
-### 2.5 （可选）本地一键部署到远端并重启服务
+### 2.6 （可选）本地一键部署到远端并重启服务
 
 如果你希望把本地工作区（未提交改动也会同步）一键发布到远端服务器，并重启 systemd 服务，可以使用 `deploy/deploy_to_server.sh`。
 

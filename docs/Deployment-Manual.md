@@ -108,9 +108,10 @@ Then configure Nginx to route `/chat`, `/api`, and `/static` to the local servic
 
 ## 7) Configure Nginx
 
-Your server already has Nginx configured. Update the existing `server { ... }`
-block (the one that listens on `8443`) by adding the following `location`
-snippets, then reload Nginx.
+Your server already has Nginx configured. You can either:
+
+- Update an existing `server { ... }` block (the one that listens on `8443`) by adding the `location` snippets below; or
+- Create a dedicated site config under `/etc/nginx/sites-available/thss-rag.conf` and enable it via a symlink (recommended for maintainability).
 
 Add routes for the chat UI, API, and static assets:
 
