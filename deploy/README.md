@@ -157,10 +157,6 @@ docker-compose -f docker-compose.yml -f deploy/docker-compose.data.yml run --rm 
 
 ```bash
 chmod +x deploy/deploy_to_server.sh
-
-SSH_HOST=<YOUR_SERVER_HOST> \
-SSH_USER=ubuntu \
-./deploy/deploy_to_server.sh
 ```
 
 常用参数（环境变量）：
