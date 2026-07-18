@@ -1,6 +1,6 @@
 # 部署与评测（Deploy）
 
-本目录提供三个可执行脚本，用于在服务器上完成部署、评测集抓取与评测执行。
+本目录提供若干可执行脚本，用于在服务器上完成环境初始化、爬取建索引、服务端配置、评测集抓取与评测执行。
 
 ## 0. 前置条件
 
@@ -26,55 +26,98 @@ cp .env.example .env
 
 注意：`.env` 不应提交到 Git。
 
-## 2. 部署（爬取 + 建索引 + 生成 systemd/Nginx 片段）
+## 2. 部署
+
+部署分为三个脚本，建议按顺序依次执行。
+
+### 2.1 初始化应用环境（setup_app.sh）
 
 在仓库根目录执行：
 
 ```bash
-chmod +x deploy/deploy.sh
-./deploy/deploy.sh
+chmod +x deploy/setup_app.sh
+./deploy/setup_app.sh
 ```
 
 脚本行为：
 
 - 创建 `.venv` 并安装 `requirements.txt`
-- 全站爬取（默认 `--limit 850`）
-- 构建索引（默认仅 BM25）
-- 生成 `systemd` unit 预览文件与 Nginx 反代片段（写入 `deploy/generated/`）
 
-常用可选参数（通过环境变量控制）：
+### 2.2 全站爬取与建索引（crawl_and_build_index.sh）
+
+在仓库根目录执行：
+
+```bash
+chmod +x deploy/crawl_and_build_index.sh
+./deploy/crawl_and_build_index.sh
+```
+
+常用参数（环境变量）：
 
 - 仅试跑 1 页（验证链路）：`CRAWL_LIMIT=1`
 - 跳过全站爬取：`CRAWL_FULL_SITE=0`
+- 设置礼貌限速（秒/请求）：`CRAWL_RATE_LIMIT=0.75`
+- 指定 SQLite 数据库路径：`DATABASE_PATH=/path/to/rag.sqlite3`
+- 指定索引输出目录：`INDEX_DIR=/path/to/index`
 - 构建向量索引：`BUILD_VECTOR_INDEX=1`（需要 `OPENAI_API_KEY`）
+
+### 2.3 生成/安装 systemd 与生成 Nginx 片段（configure_server.sh）
+
+在仓库根目录执行：
+
+```bash
+chmod +x deploy/configure_server.sh
+./deploy/configure_server.sh
+```
+
+脚本会生成：
+
+- `deploy/generated/<SERVICE_NAME>.service`
+- `deploy/generated/nginx-<SERVICE_NAME>.conf.snippet`
+
+在 Linux/systemd 环境下，若 `INSTALL_SYSTEMD=1`，会自动执行安装与启动；否则只生成预览文件。
+
+将 Nginx 片段合并到你现有的 `8443` 的 `server { ... }` 块中，然后执行：
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+常用参数（环境变量）：
+
 - 不安装 systemd（只生成预览）：`INSTALL_SYSTEMD=0`
 - 不生成 Nginx 片段：`WRITE_NGINX_SNIPPET=0`
 
 示例（只做最小可执行性验证）：
 
 ```bash
-INSTALL_SYSTEMD=0 WRITE_NGINX_SNIPPET=0 CRAWL_LIMIT=1 ./deploy/deploy.sh
+./deploy/setup_app.sh
+CRAWL_LIMIT=1 ./deploy/crawl_and_build_index.sh
+INSTALL_SYSTEMD=0 WRITE_NGINX_SNIPPET=0 ./deploy/configure_server.sh
 ```
 
-### 2.1 systemd
+### 2.4 （可选）使用 Docker + Volume 持久化数据到宿主机
 
-脚本会生成：
+如果你希望爬虫数据库与索引不落在仓库目录下，可以使用 Docker 的 named volume 持久化到宿主机（Docker 管理的 volume 路径）。
 
-- `deploy/generated/<SERVICE_NAME>.service`
+本仓库提供一个 compose override 文件 `deploy/docker-compose.data.yml`，它会：
 
-在 Linux/systemd 环境下，若 `INSTALL_SYSTEMD=1`，会自动执行安装与启动；否则只生成预览文件。
+- 将数据存放在容器内 `/data`
+- 将 `/data` 绑定到 named volume：`rag_data`
+- 设置 `DATABASE_PATH=/data/rag.sqlite3`、`INDEX_DIR=/data/index`
 
-### 2.2 Nginx
-
-脚本会生成：
-
-- `deploy/generated/nginx-<SERVICE_NAME>.conf.snippet`
-
-将该片段合并到你现有的 `8443` 的 `server { ... }` 块中，然后执行：
+启动服务（对外 8000）：
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
+docker compose -f docker-compose.yml -f deploy/docker-compose.data.yml up -d --build
+```
+
+在容器内执行全站爬取 + 建索引（数据落在 volume 里）：
+
+```bash
+docker compose -f docker-compose.yml -f deploy/docker-compose.data.yml run --rm rag-app \
+  bash -lc 'python scripts/crawl.py --full-site --limit 850 --rate-limit 0.75 --database "$DATABASE_PATH" && python scripts/build_index.py --database "$DATABASE_PATH" --index-dir "$INDEX_DIR"'
 ```
 
 ## 3. 抓取评测集（questions.html -> CSV）

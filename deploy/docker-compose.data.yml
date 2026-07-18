@@ -1,0 +1,10 @@
+services:
+  rag-app:
+    environment:
+      DATABASE_PATH: /data/rag.sqlite3
+      INDEX_DIR: /data/index
+    volumes:
+      - rag_data:/data
+
+volumes:
+  rag_data:
