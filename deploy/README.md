@@ -97,19 +97,27 @@ CRAWL_LIMIT=1 ./deploy/crawl_and_build_index.sh
 INSTALL_SYSTEMD=0 WRITE_NGINX_SNIPPET=0 ./deploy/configure_server.sh
 ```
 
-### 2.4 （可选）Nginx（独立 site 配置文件）
+### 2.4 （可选）Nginx（写入 conf.d 并重载）
 
-`configure_server.sh` 会在生成 `deploy/generated/nginx-<SERVICE_NAME>.conf.snippet` 的同时，自动创建/启用独立 Nginx site 配置文件并重载 Nginx：
+云端服务器若不使用 `sites-available/sites-enabled` 布局，可以让 `configure_server.sh` 直接写入：
 
-- `/etc/nginx/sites-available/thss-rag.conf`
-- `/etc/nginx/sites-enabled/thss-rag.conf`
+- `/etc/nginx/conf.d/thss-rag.conf`
+
+脚本会自动：
+
+- 生成 `deploy/generated/nginx-<SERVICE_NAME>.conf.snippet`（便于审阅）
+- 写入 `/etc/nginx/conf.d/thss-rag.conf`
+- `nginx -t` 校验配置
+- `systemctl reload nginx` 重载配置
 
 可选参数（环境变量）：
 
+- `NGINX_CONF_D_PATH=/etc/nginx/conf.d/thss-rag.conf`
 - `NGINX_LISTEN_PORT=8443`
 - `NGINX_SERVER_NAME=_`
-- `NGINX_SSL_CERT=/path/to/fullchain.pem`
-- `NGINX_SSL_KEY=/path/to/privkey.pem`
+- `NGINX_SSL_CERT=/etc/nginx/ssl/fullchain.crt`
+- `NGINX_SSL_KEY=/etc/nginx/ssl/server.key`
+- `NGINX_STATIC_ROOT=/var/www/html`
 - `UPSTREAM_URL=http://127.0.0.1:8000`
 
 ### 2.5 （可选）使用 Docker + Volume 持久化数据到宿主机
@@ -125,13 +133,13 @@ INSTALL_SYSTEMD=0 WRITE_NGINX_SNIPPET=0 ./deploy/configure_server.sh
 启动服务（对外 8000）：
 
 ```bash
-docker compose -f docker-compose.yml -f deploy/docker-compose.data.yml up -d --build
+docker-compose -f docker-compose.yml -f deploy/docker-compose.data.yml up -d --build
 ```
 
 在容器内执行全站爬取 + 建索引（数据落在 volume 里）：
 
 ```bash
-docker compose -f docker-compose.yml -f deploy/docker-compose.data.yml run --rm rag-app \
+docker-compose -f docker-compose.yml -f deploy/docker-compose.data.yml run --rm rag-app \
   bash -lc 'python scripts/crawl.py --full-site --limit 850 --rate-limit 0.75 --database "$DATABASE_PATH" && python scripts/build_index.py --database "$DATABASE_PATH" --index-dir "$INDEX_DIR"'
 ```
 

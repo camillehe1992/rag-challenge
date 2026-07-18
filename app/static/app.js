@@ -11,14 +11,16 @@ const currentUser = document.querySelector("#current-user");
 
 const history = [];
 
-const ROUTES = {
-  login: "#login",
-  chat: "#chat",
-};
-
 const AUTH_STORAGE_KEY = "rag_chat_authenticated";
 const USER_STORAGE_KEY = "rag_chat_username";
 const HISTORY_STORAGE_KEY = "rag_chat_history";
+
+function clearHash() {
+  if (!window.location.hash) return;
+  const url = new URL(window.location.href);
+  url.hash = "";
+  window.history.replaceState(null, "", url.toString());
+}
 
 function isAuthenticated() {
   return window.sessionStorage.getItem(AUTH_STORAGE_KEY) === "true";
@@ -52,8 +54,8 @@ function showChat({ updateRoute = true } = {}) {
   loginView.hidden = true;
   chatView.hidden = false;
   clearChatError();
-  if (updateRoute && window.location.hash !== ROUTES.chat) {
-    window.location.hash = ROUTES.chat;
+  if (updateRoute) {
+    clearHash();
   }
   messageInput.focus();
 }
@@ -63,17 +65,17 @@ function showLogin({ updateRoute = true } = {}) {
   loginView.hidden = false;
   loginError.hidden = true;
   loginError.textContent = "";
-  if (updateRoute && window.location.hash !== ROUTES.login) {
-    window.location.hash = ROUTES.login;
+  if (updateRoute) {
+    clearHash();
   }
 }
 
 function routeToInitialView() {
-  if (window.location.hash === ROUTES.chat && isAuthenticated()) {
-    showChat({ updateRoute: false });
+  if (isAuthenticated()) {
+    showChat({ updateRoute: true });
     return;
   }
-  showLogin({ updateRoute: false });
+  showLogin({ updateRoute: true });
 }
 
 function appendMessage(role, text, sources = []) {
@@ -223,14 +225,6 @@ logoutButton.addEventListener("click", async () => {
   messages.replaceChildren();
   window.sessionStorage.removeItem(HISTORY_STORAGE_KEY);
   showLogin();
-});
-
-window.addEventListener("hashchange", () => {
-  if (window.location.hash === ROUTES.chat && isAuthenticated()) {
-    showChat({ updateRoute: false });
-    return;
-  }
-  showLogin({ updateRoute: false });
 });
 
 applyAuthUI();

@@ -12,12 +12,12 @@ INSTALL_SYSTEMD="${INSTALL_SYSTEMD:-1}"
 WRITE_NGINX_SNIPPET="${WRITE_NGINX_SNIPPET:-1}"
 
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-thss-rag}"
-NGINX_AVAILABLE_PATH="${NGINX_AVAILABLE_PATH:-/etc/nginx/sites-available/${NGINX_SITE_NAME}.conf}"
-NGINX_ENABLED_PATH="${NGINX_ENABLED_PATH:-/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf}"
+NGINX_CONF_D_PATH="${NGINX_CONF_D_PATH:-/etc/nginx/conf.d/${NGINX_SITE_NAME}.conf}"
 NGINX_SERVER_NAME="${NGINX_SERVER_NAME:-_}"
 NGINX_LISTEN_PORT="${NGINX_LISTEN_PORT:-8443}"
-NGINX_SSL_CERT="${NGINX_SSL_CERT:-/etc/ssl/certs/ssl-cert-snakeoil.pem}"
-NGINX_SSL_KEY="${NGINX_SSL_KEY:-/etc/ssl/private/ssl-cert-snakeoil.key}"
+NGINX_SSL_CERT="${NGINX_SSL_CERT:-/etc/nginx/ssl/fullchain.crt}"
+NGINX_SSL_KEY="${NGINX_SSL_KEY:-/etc/nginx/ssl/server.key}"
+NGINX_STATIC_ROOT="${NGINX_STATIC_ROOT:-/var/www/html}"
 UPSTREAM_URL="${UPSTREAM_URL:-http://127.0.0.1:8000}"
 
 DEPLOY_DIR="${DEPLOY_DIR:-$ROOT_DIR/deploy}"
@@ -100,30 +100,12 @@ write_nginx_snippet() {
   log "生成 Nginx 配置片段: $NGINX_SNIPPET_PATH"
 
   cat >"$NGINX_SNIPPET_PATH" <<EOF
-location = / {
-    return 302 /chat;
-}
-
 location = /chat {
-    proxy_pass http://127.0.0.1:8000/chat;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-}
-
-location ^~ /chat/ {
-    proxy_pass http://127.0.0.1:8000/chat/;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    return 302 /chat/;
 }
 
 location ^~ /api/ {
-    proxy_pass http://127.0.0.1:8000/api/;
+    proxy_pass ${UPSTREAM_URL};
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
@@ -132,7 +114,7 @@ location ^~ /api/ {
 }
 
 location ^~ /static/ {
-    proxy_pass http://127.0.0.1:8000/static/;
+    proxy_pass ${UPSTREAM_URL};
     proxy_set_header Host \$host;
 }
 EOF
@@ -141,24 +123,60 @@ EOF
   tmp_path="/tmp/${NGINX_SITE_NAME}.conf.$$"
 
   cat >"$tmp_path" <<EOF
+# Reuse the existing 8443 SSL entry (cert + SSL params should match the default site).
 server {
-    listen ${NGINX_LISTEN_PORT} ssl;
+    listen ${NGINX_LISTEN_PORT} ssl http2;
+    listen [::]:${NGINX_LISTEN_PORT} ssl http2;
     server_name ${NGINX_SERVER_NAME};
 
     ssl_certificate ${NGINX_SSL_CERT};
     ssl_certificate_key ${NGINX_SSL_KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1h;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+
+    location /chat/ {
+        proxy_pass ${UPSTREAM_URL}/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /chat-vue/ {
+        proxy_pass ${UPSTREAM_URL}/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
 
     include ${NGINX_SNIPPET_PATH};
+
+    location / {
+        root ${NGINX_STATIC_ROOT};
+        index index.html;
+        try_files \$uri \$uri/ =404;
+    }
 }
 EOF
 
-  log "写入 Nginx site 配置: ${NGINX_AVAILABLE_PATH}"
-  sudo mkdir -p "$(dirname "$NGINX_AVAILABLE_PATH")" "$(dirname "$NGINX_ENABLED_PATH")"
-  sudo mv "$tmp_path" "$NGINX_AVAILABLE_PATH"
-  sudo chmod 0644 "$NGINX_AVAILABLE_PATH"
-
-  log "启用 Nginx 配置: ${NGINX_ENABLED_PATH}"
-  sudo ln -sfn "$NGINX_AVAILABLE_PATH" "$NGINX_ENABLED_PATH"
+  log "写入 Nginx 配置: ${NGINX_CONF_D_PATH}"
+  sudo mkdir -p "$(dirname "$NGINX_CONF_D_PATH")"
+  sudo mv "$tmp_path" "$NGINX_CONF_D_PATH"
+  sudo chmod 0644 "$NGINX_CONF_D_PATH"
 
   log "校验 Nginx 配置"
   sudo nginx -t
